@@ -1124,11 +1124,9 @@ switch:
     turn_on_action:
       - micro_wake_word.stop:
       - voice_assistant.stop:
-      - microphone.stop_capture: i2s_mics
       - logger.log: "Microphone disabled (Diag)"
     turn_off_action:
       - micro_wake_word.start:
-      - microphone.start_capture: i2s_mics
       - logger.log: "Microphone enabled (Diag)"
 
 
