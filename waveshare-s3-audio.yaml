@@ -179,8 +179,9 @@ api:
   on_client_disconnected:
     - script.execute: control_leds
 
-  encryption:
-    key: !secret api_esp32-audio-s3
+  
+  #encryption:
+   # key: !secret api_esp32-audio-s3
 
 # http_request: 
 #   verify_ssl: false
