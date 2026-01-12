@@ -443,9 +443,9 @@ voice_assistant:
   id: va
   microphone:
     microphone: i2s_mics
-    #channels: 1 #Right
+    channels: 0 #Right
     #channels: 0 #Left
-    channels: $which_mic #correct that it's left/right cannel OR number of channels?
+    #channels: $which_mic #correct that it's left/right cannel OR number of channels?
   media_player: external_media_player
   micro_wake_word: mww
   use_wake_word: false
@@ -599,8 +599,8 @@ micro_wake_word:
   id: mww
   microphone:
     microphone: i2s_mics
-    channels: $which_mic
-    #gain_factor: 4
+    channels: 0
+    gain_factor: 4
   stop_after_detection: false
   models:
     - model: https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json
