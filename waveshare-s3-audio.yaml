@@ -136,7 +136,7 @@ logger:
   level: DEBUG
 
 api:
- id: api_id
+  id: api_id
   actions:
     - action: set_led_color
       variables:
