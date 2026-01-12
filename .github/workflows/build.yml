@@ -31,3 +31,11 @@ jobs:
         with:
           yaml-file: ${{ matrix.file }}.yaml
           version: stable
+
+      - name: Upload Firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.file }}
+          path: |
+            **/.esphome/build/**/.pioenvs/**/*.bin
+            **/.esphome/build/**/.pioenvs/**/*.elf
