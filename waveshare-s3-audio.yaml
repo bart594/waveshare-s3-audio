@@ -1382,6 +1382,5 @@ binary_sensor:
     name: "Voice Assistant Active"
     id: va_active
     lambda: return id(va).is_running();
-    update_interval: 200ms
 
 
