@@ -37,5 +37,6 @@ jobs:
         with:
           name: firmware-${{ matrix.file }}
           path: |
-            **/.esphome/build/**/.pioenvs/**/*.bin
-            **/.esphome/build/**/.pioenvs/**/*.elf
+            **/*.bin
+            **/*.json
+            **/*.elf
