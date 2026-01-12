@@ -20,16 +20,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Create secrets.yaml
-        # This creates a dummy secrets.yaml for the build to succeed.
-        # If you want to produce a binary with real credentials, you should:
-        # 1. Add your secrets to GitHub Actions Secrets (Settings -> Secrets and variables -> Actions)
-        # 2. Update this step to use those secrets, e.g.:
-        #    echo "wifi_ssid: \"${{ secrets.WIFI_SSID }}\"" > secrets.yaml
         run: |
-          echo "wifi_ssid: \"TEST_SSID\"" > secrets.yaml
-          echo "wifi_password: \"TEST_PASSWORD\"" >> secrets.yaml
-          echo "api_esp32-audio-s3: \"TEST_API_KEY\"" >> secrets.yaml
-          echo "ota_password: \"TEST_OTA_PASSWORD\"" >> secrets.yaml
+          echo "wifi_ssid: \"${{ secrets.WIFI_SSID }}\"" > secrets.yaml
+          echo "wifi_password: \"${{ secrets.WIFI_PASSWORD }}\"" >> secrets.yaml
+          echo "api_esp32-audio-s3: \"${{ secrets.API_ENCRYPTION_KEY }}\"" >> secrets.yaml
+          echo "ota_password: \"${{ secrets.OTA_PASSWORD }}\"" >> secrets.yaml
 
       - name: Build ESPHome Firmware
         uses: esphome/build-action@v7
