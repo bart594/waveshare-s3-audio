@@ -210,11 +210,14 @@ psram:
 
 time:
   - platform: homeassistant
-  #- platform: pcf85063
+    id: ha_time
+    on_time_sync:
+      - lambda: id(rtc).write_time();
+
+  - platform: pcf85063
     id: rtc
-  #  address: 0x51
-    #RTC_INT = $rtc_int # extIO 5
-  #  i2c_id: internal_i2c
+    address: 0x51
+    i2c_id: internal_i2c
 
     on_time:
       - seconds: 0
@@ -223,6 +226,7 @@ time:
           - script.execute: check_alarm
     on_time_sync:
       - script.execute: publish_current_time
+
 
 light:
   - platform: esp32_rmt_led_strip
@@ -789,7 +793,14 @@ script:
             id(led_set_effect).execute(effect, r, g, b);
           };
 
+          // New: Global LED Disable
+          if (id(leds_enabled).state == false) {
+             set("off", 0,0,0);
+             return;
+          }
+
           if (improv_ble) {                          // Provisioning
+
             set("Pulse Medium", 1.0, 0.89, 0.71);    // warm white
             return;
           }
@@ -840,21 +851,31 @@ script:
           // Idle
           set("off", 0, 0, 0);
 
-  # Brief green pulse when volume changes, then restore
+  # Volume bar animation (Blue)
   - id: control_leds_volume_changed
     mode: restart
     then:
-      - light.turn_on:
-          id: status_ring
-          brightness: !lambda 'return id(led_ring_brightness).state;'
-          red: 0.0
-          green: 1.0
-          blue: 0.0
-          effect: "Pulse Fast"
       - lambda: |-
-          ESP_LOGD("led", "volume_changed: flash green"); //DEBUG
-      - delay: 1.2s
+          auto call = id(status_ring).turn_on();
+          call.set_effect("None");
+          call.set_brightness(id(led_ring_brightness).state);
+          
+          float vol = id(external_media_player).volume / 0.8f;
+          int num_leds = 7; 
+          int active = (int)(vol * num_leds + 0.5);
+          if (active == 0 && vol > 0.01) active = 1;
+          
+          for (int i = 0; i < num_leds; i++) {
+             if (i < active) {
+               call.set_pixel_rgb(i, 0.0, 0.0, 1.0); // Blue
+             } else {
+               call.set_pixel_rgb(i, 0.0, 0.0, 0.0); // Off
+             }
+          }
+          call.perform();
+      - delay: 1.5s
       - script.execute: control_leds
+
 
   # Timer sound handling
   - id: ring_timer
@@ -1022,7 +1043,28 @@ script:
             last_time_string = current_time_string;
           }
 
+  - id: volume_down_repeat
+    mode: restart
+    then:
+      - while:
+          condition:
+            binary_sensor.is_on: key_volume_down
+          then:
+            - media_player.volume_down: external_media_player
+            - delay: 200ms
+
+  - id: volume_up_repeat
+    mode: restart
+    then:
+      - while:
+          condition:
+            binary_sensor.is_on: key_volume_up
+          then:
+            - media_player.volume_up: external_media_player
+            - delay: 200ms
+
 select:
+
   - platform: template
     name: "Wake word sensitivity"
     optimistic: true
@@ -1074,11 +1116,21 @@ select:
 
 
 switch:
-  - platform: template  #TODO: make react live
+  - platform: template
     id: diag_disable_mic
     name: "Diag: disable microphone"
     optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF  # default OFF = mic works as usual
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - micro_wake_word.stop:
+      - voice_assistant.stop:
+      - microphone.stop_capture: i2s_mics
+      - logger.log: "Microphone disabled (Diag)"
+    turn_off_action:
+      - micro_wake_word.start:
+      - microphone.start_capture: i2s_mics
+      - logger.log: "Microphone enabled (Diag)"
+
 
   - platform: gpio
     id: amp_enable_8
@@ -1119,7 +1171,19 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
 
   - platform: template
+    id: leds_enabled
+    name: "LEDs Enabled"
+    icon: mdi:led-on
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_off:
+      - light.turn_off: status_ring
+    on_turn_on:
+      - script.execute: control_leds
+
+  - platform: template
     id: wake_sound
+
     name: Wake sound
     icon: "mdi:bullhorn"
     entity_category: config
@@ -1249,27 +1313,77 @@ button:
 binary_sensor:
   - platform: gpio
     name: "Key1"
+    id: key_volume_down
     pin:
       tca9555: ioexp
       number: 9 # not '12' as schematics say!
       inverted: true
-    on_press:
-      - media_player.volume_down: external_media_player
+    filters:
+      - delayed_on: 10ms
+    on_multi_click:
+      - timing:
+          - ON for at most 0.8s
+          - OFF for at least 0.1s
+        then:
+          - media_player.volume_down: external_media_player
+      - timing:
+          - ON for at least 0.8s
+        then:
+          - logger.log: "Key1 Long Press: Volume Down Repeat"
+          - script.execute: volume_down_repeat
 
   - platform: gpio
     name: "Key2"
+    id: key_action
     pin:
       tca9555: ioexp
       number: 10
       inverted: true
-    on_press:
-      - media_player.toggle: external_media_player
+    filters:
+      - delayed_on: 10ms
+    on_multi_click:
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at least 0.55s
+        then:
+          - media_player.toggle: external_media_player
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at most 0.5s
+          - ON for at most 0.5s
+          - OFF for at least 0.1s
+        then:
+          - switch.toggle: mic_mute_switch
+      - timing:
+          - ON for at least 1s
+        then:
+          - voice_assistant.start:
 
   - platform: gpio
     name: "Key3"
+    id: key_volume_up
     pin:
       tca9555: ioexp
       number: 11
       inverted: true
-    on_press:
-      - media_player.volume_up: external_media_player
+    filters:
+      - delayed_on: 10ms
+    on_multi_click:
+      - timing:
+          - ON for at most 0.8s
+          - OFF for at least 0.1s
+        then:
+          - media_player.volume_up: external_media_player
+      - timing:
+          - ON for at least 0.8s
+        then:
+          - logger.log: "Key3 Long Press: Volume Up Repeat"
+          - script.execute: volume_up_repeat
+
+  - platform: template
+    name: "Voice Assistant Active"
+    id: va_active
+    lambda: return id(va).is_running();
+    update_interval: 200ms
+
+
