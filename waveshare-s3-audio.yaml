@@ -681,7 +681,17 @@ micro_wake_word:
                                 wake_word: !lambda return wake_word;
 
 globals:
+  - id: dynamic_volume_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: last_dynamic_volume_calculation
+    type: float
+    restore_value: no
+    initial_value: '0'
+
   - id: mic_gain_saved
+
     type: float
     restore_value: yes
     initial_value: '32.0' #'24.0' DEBUG MIC
@@ -739,7 +749,47 @@ globals:
 
 
 script:
+  - id: update_dynamic_volume
+    mode: single
+    then:
+      - lambda: |-
+          if (!id(dynamic_volume_enabled)) return;
+      
+          // Don't update volume when media is playing
+          if (id(external_media_player)->state != media_player::MEDIA_PLAYER_STATE_IDLE) return;
+          
+          float ambient_level = id(ambient_sound_level_exp).state;
+          if (std::isnan(ambient_level)) return;
+          
+          float anchor = id(dynamic_volume_anchor).state;
+          float strength = id(dynamic_volume_strength).state;
+          
+          // Convert ambient level to 0-1 range
+          float normalized_level = ambient_level / 100.0f;
+          
+          // Calculate gain factor based on ambient level and strength
+          float gain = 1.0f + (normalized_level * strength);
+          
+          // Calculate new volume 
+          float new_volume = anchor * gain;
+          
+          // Clamp to valid range
+          new_volume = std::min(1.0f, std::max(0.0f, new_volume));
+          
+          // Only update if changed significantly
+          if (std::abs(new_volume - id(last_dynamic_volume_calculation)) > 0.01) {
+            id(last_dynamic_volume_calculation) = new_volume;
+            id(external_media_player)
+              ->make_call()
+              .set_volume(new_volume)
+              .perform();
+            
+            ESP_LOGD("dynamic_volume", "Ambient: %.1f%%, Gain: %.2f, New Volume: %.2f", 
+                     ambient_level, gain, new_volume);
+          }
+
   - id: flash_ring
+
     then:
       - light.turn_on: { id: status_ring, red: 1.0, green: 0.0, blue: 0.0, brightness: 100% }
       - delay: 250ms
@@ -1120,7 +1170,27 @@ select:
 
 switch:
   - platform: template
+    name: "Dynamic Volume"
+    id: dynamic_volume_switch
+    icon: "mdi:volume-vibrate"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - lambda: id(dynamic_volume_enabled) = true;
+      - script.execute: update_dynamic_volume
+    turn_off_action:
+      - lambda: |-
+          id(dynamic_volume_enabled) = false;
+          // Reset to anchor volume when disabled
+          id(external_media_player)
+            ->make_call()
+            .set_volume(id(dynamic_volume_anchor).state)
+            .perform();
+
+  - platform: template
     id: diag_disable_mic
+
     name: "Diag: disable microphone"
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
@@ -1233,7 +1303,34 @@ switch:
       - script.execute: control_leds
 
 number:
+  - platform: template
+    name: "Dyn. Vol. Anchor"
+    id: dynamic_volume_anchor
+    min_value: 0.1
+    max_value: 0.85
+    step: 0.05
+    initial_value: 0.3
+    restore_value: true
+    optimistic: true
+    icon: "mdi:volume-high"
+    unit_of_measurement: "x"
+    entity_category: config
+    
+  - platform: template 
+    name: "Dyn. Vol. Strength"
+    id: dynamic_volume_strength
+    min_value: 0
+    max_value: 5
+    step: 0.1
+    initial_value: 1.0
+    restore_value: true
+    optimistic: true
+    icon: "mdi:volume-vibrate"
+    unit_of_measurement: "x"
+    entity_category: config
+
   - platform: template # MIC DEBUG
+
     id: mic_gain_db
     name: "Mic Gain (ES7210 dB)"
     entity_category: config
@@ -1272,9 +1369,98 @@ number:
 
 
 sensor:
+  # Peak amplitude sensor (Replaced with sound_level platform)
+  - platform: sound_level
+    microphone: i2s_mics
+    measurement_duration: 5s
+    # passive: true  <-- Removed as sound_level does not support it
+    peak:
+      name: "Ambient Sound Peak"
+      id: ambient_sound_peak
+      internal: true
+      filters:
+        - lambda: |-
+            // Don't measure when media is playing to avoid feedback
+            if (id(external_media_player)->state != media_player::MEDIA_PLAYER_STATE_IDLE) {
+               // Return previous state or 0 if undefined
+               if (std::isnan(id(ambient_sound_peak).state)) return 0.0;
+               return id(ambient_sound_peak).state;
+            }
+            // Check if micro_wake_word is ready (keeping safety)
+            if (!id(mww).is_ready()) {
+               return 0.0;
+            }
+            return x;
+
+  # Linear scaling sensor
+  - platform: template
+    name: "Ambient Sound Level Linear"
+    id: ambient_sound_level
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 5s
+    icon: "mdi:microphone-outline"
+    state_class: "measurement"
+    entity_category: "diagnostic" 
+    filters:
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 5
+      - throttle_average: 5s
+    lambda: |-
+      float peak = id(ambient_sound_peak).state;
+      if (std::isnan(peak)) {
+        return 0;
+      }
+      
+      // Simple linear scaling between min/max peak values
+      // Adjusted MIN_PEAK as RMS might be lower than Peak
+      const float MIN_PEAK = 0.000024f;
+      const float MAX_PEAK = 0.9f;
+      
+      float percentage = 0;
+      if (peak > MIN_PEAK) {
+        percentage = (peak - MIN_PEAK) / (MAX_PEAK - MIN_PEAK) * 100;
+        percentage = std::min(100.0f, std::max(0.0f, percentage));
+      }
+      
+      ESP_LOGD("ambient_sound", "Linear Percentage: %.1f%%", percentage);
+      return percentage;
+
+  # Exponential scaling sensor
+  - platform: template
+    name: "Ambient Sound Level"
+    id: ambient_sound_level_exp
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 5s
+    icon: "mdi:microphone-outline"
+    state_class: "measurement"
+    filters:
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 5
+      - throttle_average: 5s
+    lambda: |-
+      float linear_value = id(ambient_sound_level).state;
+      if (std::isnan(linear_value)) {
+        return 0;
+      }
+      
+      // Apply exponential curve
+      // Using x^0.4 which gives more resolution to lower values while
+      // still maintaining a reasonable curve
+      constexpr float exp = 0.4f;
+      float percentage = pow(linear_value / 100.0f, exp) * 100.0f;
+      
+      ESP_LOGD("ambient_sound_exp", "Exponential scaling: %.1f%% -> %.1f%%", 
+               linear_value, percentage);
+      
+      return percentage;
 
   - platform: template
     id: next_timer
+
     name: "Next timer"
     update_interval: never
     disabled_by_default: true
@@ -1385,5 +1571,10 @@ binary_sensor:
     name: "Voice Assistant Active"
     id: va_active
     lambda: return id(va).is_running();
+
+interval:
+  - interval: 5s
+    then:
+      - script.execute: update_dynamic_volume
 
 
