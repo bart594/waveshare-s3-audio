@@ -1373,7 +1373,7 @@ sensor:
   - platform: sound_level
     microphone: i2s_mics
     measurement_duration: 5s
-    # passive: true  <-- Removed as sound_level does not support it
+    passive: true
     peak:
       name: "Ambient Sound Peak"
       id: ambient_sound_peak
