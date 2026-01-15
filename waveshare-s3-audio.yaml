@@ -792,23 +792,42 @@ script:
     parameters:
       action: string
     then:
-      - lambda: |-
-          if (action == "Volume Down") {
-            id(external_media_player)->make_call().volume_down().perform();
-          } else if (action == "Volume Up") {
-            id(external_media_player)->make_call().volume_up().perform();
-          } else if (action == "Play/Pause") {
-            id(external_media_player)->toggle();
-          } else if (action == "Mute Toggle") {
-            id(mic_mute_switch).toggle();
-          } else if (action == "Start Voice") {
-            id(va)->start();
-          } else if (action == "Stop Voice") {
-            id(va)->stop();
-          } else if (action == "Toggle LEDs") {
-            id(leds_enabled).toggle();
-          }
-          // "None" = do nothing
+      - if:
+          condition:
+            lambda: 'return action == "Volume Down";'
+          then:
+            - media_player.volume_down: external_media_player
+      - if:
+          condition:
+            lambda: 'return action == "Volume Up";'
+          then:
+            - media_player.volume_up: external_media_player
+      - if:
+          condition:
+            lambda: 'return action == "Play/Pause";'
+          then:
+            - media_player.toggle: external_media_player
+      - if:
+          condition:
+            lambda: 'return action == "Mute Toggle";'
+          then:
+            - switch.toggle: mic_mute_switch
+      - if:
+          condition:
+            lambda: 'return action == "Start Voice";'
+          then:
+            - voice_assistant.start
+      - if:
+          condition:
+            lambda: 'return action == "Stop Voice";'
+          then:
+            - voice_assistant.stop
+      - if:
+          condition:
+            lambda: 'return action == "Toggle LEDs";'
+          then:
+            - switch.toggle: leds_enabled
+      # "None" does nothing
 
   - id: flash_ring
 
