@@ -636,7 +636,9 @@ micro_wake_word:
     #  id: hey_mycroft
     - model: https://github.com/kahrendt/microWakeWord/releases/download/stop/stop.json
       id: stop
-      internal: true #false
+      internal: true
+      probability_cutoff: 0.5  # Very sensitive for quick interruption
+
   vad:
     probability_cutoff: 0.03 #0.03
   on_wake_word_detected:
