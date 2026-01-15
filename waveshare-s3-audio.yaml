@@ -786,7 +786,29 @@ script:
             
             ESP_LOGD("dynamic_volume", "Ambient: %.1f%%, Gain: %.2f, New Volume: %.2f", 
                      ambient_level, gain, new_volume);
+           }
+
+  - id: execute_button_action
+    parameters:
+      action: string
+    then:
+      - lambda: |-
+          if (action == "Volume Down") {
+            id(external_media_player)->make_call().volume_down().perform();
+          } else if (action == "Volume Up") {
+            id(external_media_player)->make_call().volume_up().perform();
+          } else if (action == "Play/Pause") {
+            id(external_media_player)->toggle();
+          } else if (action == "Mute Toggle") {
+            id(mic_mute_switch).toggle();
+          } else if (action == "Start Voice") {
+            id(va)->start();
+          } else if (action == "Stop Voice") {
+            id(va)->stop();
+          } else if (action == "Toggle LEDs") {
+            id(leds_enabled).toggle();
           }
+          // "None" = do nothing
 
   - id: flash_ring
 
@@ -1566,7 +1588,9 @@ binary_sensor:
           - ON for at most 0.8s
           - OFF for at least 0.1s
         then:
-          - media_player.volume_down: external_media_player
+          - script.execute:
+              id: execute_button_action
+              action: !lambda 'return id(key1_action).state;'
       - timing:
           - ON for at least 0.8s
         then:
@@ -1587,7 +1611,9 @@ binary_sensor:
           - ON for at most 0.5s
           - OFF for at least 0.55s
         then:
-          - media_player.toggle: external_media_player
+          - script.execute:
+              id: execute_button_action
+              action: !lambda 'return id(key2_action).state;'
       - timing:
           - ON for at most 0.5s
           - OFF for at most 0.5s
@@ -1614,7 +1640,9 @@ binary_sensor:
           - ON for at most 0.8s
           - OFF for at least 0.1s
         then:
-          - media_player.volume_up: external_media_player
+          - script.execute:
+              id: execute_button_action
+              action: !lambda 'return id(key3_action).state;'
       - timing:
           - ON for at least 0.8s
         then:
