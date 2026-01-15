@@ -636,9 +636,7 @@ micro_wake_word:
     #  id: hey_mycroft
     - model: https://github.com/kahrendt/microWakeWord/releases/download/stop/stop.json
       id: stop
-      internal: true
-      probability_cutoff: 0.5  # Very sensitive for quick interruption
-
+      internal: true #false
   vad:
     probability_cutoff: 0.03 #0.03
   on_wake_word_detected:
@@ -1158,7 +1156,7 @@ select:
     optimistic: true
     name: "Alarm action"
     id: alarm_action
-    icon: mdi:bell-plus
+    icon: mdi:bell-badge
     options:
       - "Play sound"
       - "Send event"
@@ -1168,6 +1166,60 @@ select:
       then:
         - lambda: |-
             id(saved_alarm_action) = x;
+
+  - platform: template
+    name: "Key1 Single Click Action"
+    id: key1_action
+    optimistic: true
+    restore_value: true
+    initial_option: "Volume Down"
+    options:
+      - "Volume Down"
+      - "Volume Up"
+      - "Play/Pause"
+      - "Mute Toggle"
+      - "Start Voice"
+      - "Stop Voice"
+      - "Toggle LEDs"
+      - "None"
+    entity_category: config
+    icon: "mdi:gesture-tap"
+
+  - platform: template
+    name: "Key2 Single Click Action"
+    id: key2_action
+    optimistic: true
+    restore_value: true
+    initial_option: "Play/Pause"
+    options:
+      - "Volume Down"
+      - "Volume Up"
+      - "Play/Pause"
+      - "Mute Toggle"
+      - "Start Voice"
+      - "Stop Voice"
+      - "Toggle LEDs"
+      - "None"
+    entity_category: config
+    icon: "mdi:gesture-tap"
+
+  - platform: template
+    name: "Key3 Single Click Action"
+    id: key3_action
+    optimistic: true
+    restore_value: true
+    initial_option: "Volume Up"
+    options:
+      - "Volume Down"
+      - "Volume Up"
+      - "Play/Pause"
+      - "Mute Toggle"
+      - "Start Voice"
+      - "Stop Voice"
+      - "Toggle LEDs"
+      - "None"
+    entity_category: config
+    icon: "mdi:gesture-tap"
 
 
 switch:
